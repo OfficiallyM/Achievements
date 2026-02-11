@@ -1,4 +1,5 @@
 ﻿using Achievements.Core;
+using Achievements.Extensions;
 using Achievements.Utilities;
 using Achievements.Utilities.UI;
 using System;
@@ -27,10 +28,25 @@ namespace Achievements
 		internal static bool IsOnMenu => mainscript.M == null;
 		internal static bool IsPaused => mainscript.M?.menu?.Menu?.activeSelf ?? false;
 
+		/// <summary>
+		/// Occurs when an achievement state is updated.
+		/// </summary>
+		public static event Action<State> OnStateChange;
+		/// <summary>
+		/// Occurs when the progress of an achievement is updated.
+		/// </summary>
+		public static event Action<State> OnAchievementProgress;
+		/// <summary>
+		/// Occurs when an achievement is unlocked, providing the current state information.
+		/// </summary>
+		public static event Action<State> OnAchievementUnlock;
+
 		private bool _showUI = false;
 		private static int _achievementsMissingDefinition = 0;
 		private Vector2 _scrollPosition = Vector2.zero;
 		private bool _hasPostLoaded = false;
+		private List<Notification> _notificationQueue = new List<Notification>();
+		private Notification _renderingNotification;
 
 		public Achievements()
 		{
@@ -45,14 +61,18 @@ namespace Achievements
 		{
 			SaveUtilities.Load();
 
+			OnAchievementUnlock += AchievementUnlock;
+
 			// Test achievements.
-			RegisterAchievement(ID, "first_start", "Hello World", "Start the game for the first time");
+			RegisterAchievement(ID, "first_start", "Hello World", "Start the game");
 			RegisterAchievement(ID, "secret_test", "Secret Achievement", "Find the hidden thing", isSecret: true);
-			RegisterAchievement(ID, "drive_1k", "Starting the drive", "Drive 1 kilometer", maxProgress: 1);
+			RegisterAchievement(ID, "drive_100km", "Starting the drive", "Drive 100 kilometers", maxProgress: 100);
+
+			// TODO: Currently won't be possible for other mods to unlock achievements on menu load because BuildData()
+			// needs calling after achievements are registered but before any are unlocked.
+			BuildData();
 
 			UnlockAchievement(ID, "first_start");
-
-			BuildData();
 		}
 
 		/// <summary>
@@ -104,13 +124,16 @@ namespace Achievements
 
 			int progress = achievement.Progress ?? 0;
 			if (definition.MaxProgress != null)
+			{
 				achievement.Progress = Math.Min(progress + amount, definition.MaxProgress.Value);
+				OnAchievementProgress?.Invoke(achievement);
+			}
 
-			if ((definition.MaxProgress == null || achievement.Progress > definition.MaxProgress) && !achievement.IsUnlocked)
+			if ((definition.MaxProgress == null || achievement.Progress >= definition.MaxProgress) && !achievement.IsUnlocked)
 			{
 				achievement.IsUnlocked = true;
 				achievement.UnlockedAt = DateTime.Now;
-				achievement.UnlockedSaveName = mainscript.M?.DFMS?.savefilename ?? "";
+				OnAchievementUnlock?.Invoke(achievement);
 			}
 			SaveUtilities.Upsert(achievement);
 		}
@@ -180,6 +203,9 @@ namespace Achievements
 			return null;
 		}
 
+		internal static void RaiseOnStateChange(State state) 
+			=> OnStateChange?.Invoke(state);
+
 		private static void BuildData()
 		{
 			_achievementsMissingDefinition = 0;
@@ -228,12 +254,42 @@ namespace Achievements
 			}
 		}
 
+		private AchievementData GetData(string modId, string achievementId)
+		{
+			foreach (var data in Data)
+			{
+				if (data.ModId == modId && data.AchievementId == achievementId)
+					return data;
+			}
+			return null;
+		}
+
+		private AchievementData GetData(State state)
+		{
+			return GetData(state.ModId, state.AchievementId);
+		}
+
+		public void AchievementUnlock(State state)
+		{
+			_notificationQueue.Add(new Notification()
+			{
+				Achievement = GetData(state),
+			});
+		}
+
 		private void ToggleUI(bool? force = null)
 		{
 			if (force.HasValue)
 				_showUI = force.Value;
 			else
 				_showUI = !_showUI;
+
+			if (!IsOnMenu)
+			{
+				mainscript.M.crsrLocked = !_showUI;
+				mainscript.M.SetCursorVisible(_showUI);
+				mainscript.M.menu.gameObject.SetActive(!_showUI);
+			}
 		}
 
 		public override void Update()
@@ -248,7 +304,7 @@ namespace Achievements
 				_hasPostLoaded = true;
 			}
 
-			if (_showUI && !(mainscript.M?.menu?.Menu?.activeSelf ?? false) && Input.GetButtonDown("Cancel"))
+			if (_showUI && Input.GetButtonDown("Cancel"))
 				ToggleUI(false);
 		}
 
@@ -264,6 +320,8 @@ namespace Achievements
 			if (_showUI)
 				RenderUI();
 
+			RenderNotifications();
+
 			// Reset back to default Unity skin to avoid styling bleeding to other UI mods.
 			GUI.skin = null;
 		}
@@ -273,10 +331,10 @@ namespace Achievements
 			// Don't show UI when on main menu if settings or save screens are active.
 			if (IsOnMenu && (mainmenuscript.mainmenu.SettingsScreenObj.activeSelf || mainmenuscript.mainmenu.SaveScreenObj.activeSelf))
 				return;
-			// Don't show UI when in game if pause menu is not active.
-			else if (!IsOnMenu && !IsPaused)
+			else if (!IsOnMenu && IsPaused)
 			{
-				ToggleUI(false);
+				mainscript.M.PressedEscape();
+				ToggleUI(true);
 				return;
 			}
 
@@ -314,11 +372,69 @@ namespace Achievements
 					GUILayout.Label(achievement.Definition.Name, "LabelSubHeader");
 					GUILayout.Label(achievement.Definition.Description);
 				}
+
+				// Render progress bar.
+				if (achievement.Definition.MaxProgress != null)
+				{
+					float progress = (float)(achievement.State.Progress ?? 0) / achievement.Definition.MaxProgress.Value;
+
+					GUILayout.BeginHorizontal();
+					Rect progressRect = GUILayoutUtility.GetRect(200, 20, GUILayout.ExpandWidth(true));
+
+					// Background.
+					GUI.DrawTexture(progressRect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0, new Color(0.2f, 0.2f, 0.2f, 1f), 0, 0);
+
+					// Fill.
+					Rect fillRect = new Rect(progressRect.x, progressRect.y, progressRect.width * progress, progressRect.height);
+					GUI.DrawTexture(fillRect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0, new Color(0f, 0.8f, 0f, 1f), 0, 0);
+
+					// Text overlay.
+					GUI.Label(progressRect, $"{achievement.State.Progress ?? 0} / {achievement.Definition.MaxProgress}", "LabelCenter");
+
+					GUILayout.EndHorizontal();
+				}
+
 				GUILayout.BeginHorizontal("box");
 				GUILayout.Label($"Provided by: {achievement.ModId}");
 				GUILayout.FlexibleSpace();
 				GUILayout.Label(achievement.State.IsUnlocked ? "<color=#0F0>Unlocked</color>" : "<color=#F00>Locked</color>");
 				GUILayout.EndHorizontal();
+
+				if (Debug)
+				{
+					GUILayout.BeginVertical("BoxDark");
+					GUILayout.Label("Debug settings", "LabelCenter");
+					GUILayout.BeginHorizontal();
+					if (achievement.Definition.MaxProgress != null) {
+						int progress = achievement.State.Progress ?? 0;
+						if (GUILayout.Button("-", GUILayout.MaxWidth(30)))
+						{
+							achievement.State.Progress = Mathf.Clamp(progress - 1, 0, achievement.Definition.MaxProgress.Value);
+							SaveUtilities.Upsert(achievement.State);
+						}
+
+						if (GUILayout.Button("+", GUILayout.MaxWidth(30)))
+						{
+							AddProgress(achievement.ModId, achievement.AchievementId);
+						}
+					}
+					GUILayout.FlexibleSpace();
+
+					if (GUILayout.Button(achievement.State.IsUnlocked ? "Re-lock": "Unlock", GUILayout.ExpandWidth(false)))
+					{
+						achievement.State.IsUnlocked = !achievement.State.IsUnlocked;
+						if (!achievement.State.IsUnlocked)
+						{
+							achievement.State.UnlockedAt = null;
+							achievement.State.Progress = null;
+						}
+						else
+							OnAchievementUnlock?.Invoke(achievement.State);
+						SaveUtilities.Upsert(achievement.State);
+					}
+					GUILayout.EndHorizontal();
+					GUILayout.EndVertical();
+				}
 				GUILayout.EndVertical();
 			}
 
@@ -327,6 +443,38 @@ namespace Achievements
 			if (_achievementsMissingDefinition > 0)
 				GUILayout.Label($"{_achievementsMissingDefinition} undefined stored achievements", "LabelCenter");
 			GUILayout.Label($"<color=#f87ffa><size=16>v{Version}</size></color>", "LabelCenter");
+			GUILayout.EndVertical();
+			GUILayout.EndArea();
+		}
+
+		private void RenderNotifications()
+		{
+			if (_renderingNotification == null)
+			{
+				if (_notificationQueue.Count == 0) return;
+
+				_renderingNotification = _notificationQueue[0];
+				_renderingNotification.StartDisplayTime = Time.unscaledTime;
+				return;
+			}
+
+			float currentTime = Time.unscaledTime;
+			// Render for 7 seconds.
+			if (Mathf.RoundToInt(currentTime - _renderingNotification.StartDisplayTime.Value) >= 7)
+			{
+				_notificationQueue.Remove(_renderingNotification);
+				_renderingNotification = null;
+				return;
+			}
+
+			float width = 300f;
+			float height = 100f;
+			GUILayout.BeginArea(new Rect(Screen.width - width - 10f, Screen.height - height - 10f, width, height), "", "BoxDark");
+			GUILayout.BeginVertical();
+			GUILayout.BeginHorizontal("BoxDark");
+			GUILayout.Label("Achievement unlocked", "LabelHeaderCenter");
+			GUILayout.EndHorizontal();
+			GUILayout.Label(_renderingNotification.Achievement.Definition.Name, "LabelSubHeaderCenter");
 			GUILayout.EndVertical();
 			GUILayout.EndArea();
 		}

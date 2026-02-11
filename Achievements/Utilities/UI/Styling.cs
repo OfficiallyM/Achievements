@@ -159,9 +159,17 @@ namespace Achievements.Utilities.UI
 				labelHeader.focused.textColor = textColour;
 				labelHeader.wordWrap = true;
 
+				GUIStyle labelHeaderCenter = new GUIStyle(labelHeader);
+				labelHeaderCenter.name = "LabelHeaderCenter";
+				labelHeaderCenter.alignment = TextAnchor.MiddleCenter;
+
 				GUIStyle labelSubHeader = new GUIStyle(labelHeader);
 				labelSubHeader.name = "LabelSubHeader";
 				labelSubHeader.fontSize = 18;
+
+				GUIStyle labelSubHeaderCenter = new GUIStyle(labelSubHeader);
+				labelSubHeaderCenter.name = "LabelSubHeaderCenter";
+				labelSubHeaderCenter.alignment = TextAnchor.MiddleCenter;
 
 				GUIStyle labelMessage = new GUIStyle(_skin.label);
 				labelMessage.name = "LabelMessage";
@@ -211,7 +219,9 @@ namespace Achievements.Utilities.UI
 
 					// Labels.
 					labelHeader,
+					labelHeaderCenter,
 					labelSubHeader,
+					labelSubHeaderCenter,
 					labelMessage,
 					labelCenter,
 					labelLeft,

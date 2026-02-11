@@ -62,16 +62,11 @@ namespace Achievements.Utilities
 		/// AchievementId properties.</param>
 		public static void Upsert(State state)
 		{
-			State existing = _data.Achievements.FirstOrDefault(a => a.ModId == state.ModId && a.AchievementId == state.AchievementId);
-			if (existing != null)
-			{
-				int index = _data.Achievements.IndexOf(existing);
-				_data.Achievements[index] = state;
-			}
-			else
-			{
+			bool doesExist = _data.Achievements.IndexOf(state) != -1;
+			if (!doesExist)
 				_data.Achievements.Add(state);
-			}
+			else
+				Achievements.RaiseOnStateChange(state);
 			Save();
 		}
 
