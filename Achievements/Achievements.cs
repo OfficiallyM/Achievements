@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TLDLoader;
 using UnityEngine;
+using static Achievements.Utilities.UI.Animator;
 
 namespace Achievements
 {
@@ -43,7 +44,6 @@ namespace Achievements
 
 		private const float NOTIFICATION_WIDTH = 300f;
 		private const float NOTIFICATION_HEIGHT = 100f;
-		private const float SLIDE_SPEED = 4f;
 		private const float DISPLAY_DURATION = 7f;
 
 		private bool _showUI = false;
@@ -277,10 +277,7 @@ namespace Achievements
 
 		private void ToggleUI(bool? force = null)
 		{
-			if (force.HasValue)
-				_showUI = force.Value;
-			else
-				_showUI = !_showUI;
+			_showUI = force ?? !_showUI;
 
 			if (!IsOnMenu)
 			{
@@ -303,6 +300,11 @@ namespace Achievements
 				}
 
 				RefreshFilteredData();
+				Animator.Play("mainUI", Animator.AnimationState.SlideIn);
+			}
+			else
+			{
+				Animator.Play("mainUI", Animator.AnimationState.SlideOut);
 			}
 		}
 
@@ -317,10 +319,10 @@ namespace Achievements
 			Styling.Bootstrap();
 			GUI.skin = Styling.GetSkin();
 
-			if ((IsOnMenu || IsPaused) && GUI.Button(new Rect(Screen.width * 0.70f, 10f, 200, 50), "Achievements manager"))
+			if ((IsOnMenu || IsPaused) && GUI.Button(new Rect(Screen.width * 0.70f, 10f, 200, 50), "Achievements Manager"))
 				ToggleUI();
 
-			if (_showUI)
+			if (_showUI || !Animator.IsIdle("mainUI"))
 				RenderUI();
 
 			RenderNotifications();
@@ -345,8 +347,13 @@ namespace Achievements
 			float height = Screen.height * 0.75f;
 			float x = Screen.width / 2 - width / 2;
 			float y = Screen.height / 2 - height / 2;
+			Rect targetRect = new Rect(x, y, width, height);
+			Rect animatedRect = Animator.Slide("mainUI", targetRect, SlideDirection.Bottom);
 
-			GUILayout.BeginArea(new Rect(x, y, width, height), $"<color=#f87ffa><size=18><b>{Name}</b></size>\n<size=16>Made with ❤️ by {Author}</size></color>", "box");
+			if (!_showUI && Animator.IsIdle("mainUI"))
+				return;
+
+			GUILayout.BeginArea(animatedRect, $"<color=#f87ffa><size=18><b>{Name}</b></size>\n<size=16>Made with ❤️ by {Author}</size></color>", "box");
 			GUILayout.BeginHorizontal();
 			GUILayout.FlexibleSpace();
 			if (GUILayout.Button("X"))
@@ -482,21 +489,27 @@ namespace Achievements
 
 				_renderingNotification = _notificationQueue[0];
 				_renderingNotification.StartDisplayTime = Time.unscaledTime;
+				Animator.Play("notification", Animator.AnimationState.SlideIn);
+				return;
+			}
+
+			float elapsed = Time.unscaledTime - _renderingNotification.StartDisplayTime.Value;
+
+			// Trigger slide out in last second.
+			if (elapsed >= DISPLAY_DURATION - 1f && Animator.IsIdle("notification"))
+				Animator.Play("notification", Animator.AnimationState.SlideOut);
+
+			// Remove once animation finishes.
+			if (elapsed >= DISPLAY_DURATION && Animator.IsIdle("notification"))
+			{
+				_notificationQueue.Remove(_renderingNotification);
+				_renderingNotification = null;
 				Animator.Reset("notification");
 				return;
 			}
 
-			float currentTime = Time.unscaledTime;
-			float elapsed = currentTime - _renderingNotification.StartDisplayTime.Value;
-			if (Mathf.RoundToInt(elapsed) >= DISPLAY_DURATION)
-			{
-				_notificationQueue.Remove(_renderingNotification);
-				_renderingNotification = null;
-				return;
-			}
-
 			Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
-			Rect animatedRect = Animator.Slide("notification", targetRect, DISPLAY_DURATION, elapsed, Animator.SlideDirection.Right, Animator.SlideMode.InOut, SLIDE_SPEED);
+			Rect animatedRect = Animator.Slide("notification", targetRect, SlideDirection.Right);
 			GUILayout.BeginArea(animatedRect, "", "BoxDark");
 			GUILayout.BeginVertical();
 			GUILayout.BeginHorizontal("BoxDark");
