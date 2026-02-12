@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization;
 using TLDLoader;
 using UnityEngine;
+using static Achievements.Utilities.UI.Animator;
 
 namespace Achievements
 {
@@ -44,9 +45,13 @@ namespace Achievements
 		private bool _showUI = false;
 		private static int _achievementsMissingDefinition = 0;
 		private Vector2 _scrollPosition = Vector2.zero;
-		private bool _hasPostLoaded = false;
 		private List<Notification> _notificationQueue = new List<Notification>();
 		private Notification _renderingNotification;
+
+		private const float NOTIFICATION_WIDTH = 300f;
+		private const float NOTIFICATION_HEIGHT = 100f;
+		private const float SLIDE_SPEED = 4f;
+		private const float DISPLAY_DURATION = 7f;
 
 		public Achievements()
 		{
@@ -65,12 +70,8 @@ namespace Achievements
 
 			// Test achievements.
 			RegisterAchievement(ID, "first_start", "Hello World", "Start the game");
-			RegisterAchievement(ID, "secret_test", "Secret Achievement", "Find the hidden thing", isSecret: true);
+			RegisterAchievement(ID, "secret_test", "Test Secret Achievement", "Find the hidden thing", isSecret: true);
 			RegisterAchievement(ID, "drive_100km", "Starting the drive", "Drive 100 kilometers", maxProgress: 100);
-
-			// TODO: Currently won't be possible for other mods to unlock achievements on menu load because BuildData()
-			// needs calling after achievements are registered but before any are unlocked.
-			BuildData();
 
 			UnlockAchievement(ID, "first_start");
 		}
@@ -93,7 +94,7 @@ namespace Achievements
 			if (GetDefinition(modId, achievementId) != null)
 				throw new InvalidOperationException($"Achievement '{achievementId}' already registered for mod '{modId}'");
 
-			Definitions.Add(new Definition()
+			var definition = new Definition()
 			{
 				ModId = modId,
 				AchievementId = achievementId,
@@ -101,7 +102,15 @@ namespace Achievements
 				Description = description,
 				MaxProgress = maxProgress,
 				IsSecret = isSecret
-			});
+			};
+			Definitions.Add(definition);
+
+			Data.Add(new AchievementData(
+				definition.ModId,
+				definition.AchievementId,
+				definition,
+				GetAchievement(definition.ModId, definition.AchievementId)
+			));
 		}
 
 		/// <summary>
@@ -206,54 +215,6 @@ namespace Achievements
 		internal static void RaiseOnStateChange(State state) 
 			=> OnStateChange?.Invoke(state);
 
-		private static void BuildData()
-		{
-			_achievementsMissingDefinition = 0;
-
-			foreach (var definition in Definitions)
-			{
-				bool exists = false;
-				foreach (var data in Data)
-				{
-					if (definition.ModId == data.ModId && definition.AchievementId == data.AchievementId)
-					{
-						exists = true;
-						break;
-					}
-				}
-				
-				if (!exists)
-				{
-					Data.Add(new AchievementData(
-						definition.ModId,
-						definition.AchievementId,
-						definition,
-						GetAchievement(definition.ModId, definition.AchievementId)
-					));
-				}
-			}
-
-			// Check states for any achievements that haven't been defined yet.
-			var states = SaveUtilities.GetAchievements();
-			foreach (var state in states)
-			{
-				bool exists = false;
-				foreach (var data in Data)
-				{
-					if (state.ModId == data.ModId && state.AchievementId == data.AchievementId)
-					{
-						exists = true;
-						break;
-					}
-				}
-
-				if (!exists)
-				{
-					_achievementsMissingDefinition++;
-				}
-			}
-		}
-
 		private AchievementData GetData(string modId, string achievementId)
 		{
 			foreach (var data in Data)
@@ -290,20 +251,24 @@ namespace Achievements
 				mainscript.M.SetCursorVisible(_showUI);
 				mainscript.M.menu.gameObject.SetActive(!_showUI);
 			}
+
+			if (_showUI)
+			{
+				// Check states for any achievements that haven't been defined yet.
+				_achievementsMissingDefinition = 0;
+				var states = SaveUtilities.GetAchievements();
+				foreach (var state in states)
+				{
+					if (GetData(state)?.Definition == null)
+					{
+						_achievementsMissingDefinition++;
+					}
+				}
+			}
 		}
 
 		public override void Update()
 		{
-			if (IsOnMenu && _hasPostLoaded)
-				_hasPostLoaded = false;
-
-			// Build achievement data once all mods are fully loaded to avoid missing any.
-			if (!IsOnMenu && !_hasPostLoaded)
-			{
-				BuildData();
-				_hasPostLoaded = true;
-			}
-
 			if (_showUI && Input.GetButtonDown("Cancel"))
 				ToggleUI(false);
 		}
@@ -364,7 +329,7 @@ namespace Achievements
 				GUILayout.BeginVertical(achievement.State.IsUnlocked ? "box" : "BoxDark");
 				if (achievement.Definition.IsSecret && !achievement.State.IsUnlocked)
 				{
-					GUILayout.Label("Secret achievement", "LabelSubHeader");
+					GUILayout.Label("Secret Achievement", "LabelSubHeader");
 					GUILayout.Label("Details will reveal when unlocked");
 				}
 				else
@@ -455,24 +420,25 @@ namespace Achievements
 
 				_renderingNotification = _notificationQueue[0];
 				_renderingNotification.StartDisplayTime = Time.unscaledTime;
+				Animator.Reset("notification");
 				return;
 			}
 
 			float currentTime = Time.unscaledTime;
-			// Render for 7 seconds.
-			if (Mathf.RoundToInt(currentTime - _renderingNotification.StartDisplayTime.Value) >= 7)
+			float elapsed = currentTime - _renderingNotification.StartDisplayTime.Value;
+			if (Mathf.RoundToInt(elapsed) >= DISPLAY_DURATION)
 			{
 				_notificationQueue.Remove(_renderingNotification);
 				_renderingNotification = null;
 				return;
 			}
 
-			float width = 300f;
-			float height = 100f;
-			GUILayout.BeginArea(new Rect(Screen.width - width - 10f, Screen.height - height - 10f, width, height), "", "BoxDark");
+			Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
+			Rect animatedRect = Animator.Slide("notification", targetRect, DISPLAY_DURATION, elapsed, SlideDirection.Right, SlideMode.InOut, SLIDE_SPEED);
+			GUILayout.BeginArea(animatedRect, "", "BoxDark");
 			GUILayout.BeginVertical();
 			GUILayout.BeginHorizontal("BoxDark");
-			GUILayout.Label("Achievement unlocked", "LabelHeaderCenter");
+			GUILayout.Label("Achievement Unlocked", "LabelHeaderCenter");
 			GUILayout.EndHorizontal();
 			GUILayout.Label(_renderingNotification.Achievement.Definition.Name, "LabelSubHeaderCenter");
 			GUILayout.EndVertical();
