@@ -278,8 +278,7 @@ namespace Achievements
 			Styling.Bootstrap();
 			GUI.skin = Styling.GetSkin();
 
-			// TODO: Proper way of opening the UI.
-			if ((IsOnMenu || IsPaused) && GUI.Button(new Rect(0, 0, 200, 25), "Achievements manager"))
+			if ((IsOnMenu || IsPaused) && GUI.Button(new Rect(Screen.width * 0.70f, 10f, 200, 50), "Achievements manager"))
 				ToggleUI();
 
 			if (_showUI)
