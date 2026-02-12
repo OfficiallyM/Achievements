@@ -4,10 +4,9 @@ using Achievements.Utilities;
 using Achievements.Utilities.UI;
 using System;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
+using System.Linq;
 using TLDLoader;
 using UnityEngine;
-using static Achievements.Utilities.UI.Animator;
 
 namespace Achievements
 {
@@ -42,16 +41,22 @@ namespace Achievements
 		/// </summary>
 		public static event Action<State> OnAchievementUnlock;
 
+		private const float NOTIFICATION_WIDTH = 300f;
+		private const float NOTIFICATION_HEIGHT = 100f;
+		private const float SLIDE_SPEED = 4f;
+		private const float DISPLAY_DURATION = 7f;
+
 		private bool _showUI = false;
 		private static int _achievementsMissingDefinition = 0;
 		private Vector2 _scrollPosition = Vector2.zero;
 		private List<Notification> _notificationQueue = new List<Notification>();
 		private Notification _renderingNotification;
-
-		private const float NOTIFICATION_WIDTH = 300f;
-		private const float NOTIFICATION_HEIGHT = 100f;
-		private const float SLIDE_SPEED = 4f;
-		private const float DISPLAY_DURATION = 7f;
+		private List<AchievementData> _filteredData;
+		private string[] _sortOptions = { "Default", "Unlocked", "A-Z", "Progress" };
+		private string _searchQuery;
+		private string _lastSearchQuery;
+		private int _sortIndex;
+		private int _lastSortIndex;
 
 		public Achievements()
 		{
@@ -238,6 +243,38 @@ namespace Achievements
 			});
 		}
 
+		private void RefreshFilteredData()
+		{
+			var filtered = string.IsNullOrEmpty(_searchQuery)
+				? Data
+				: Data.Where(a =>
+					a.Definition.Name.IndexOf(_searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+					a.Definition.Description.IndexOf(_searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+					a.ModId.IndexOf(_searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+					a.AchievementId.IndexOf(_searchQuery, StringComparison.OrdinalIgnoreCase) >= 0);
+
+			switch (_sortIndex)
+			{
+				// Unlocked - unlocked first, then locked.
+				case 1: 
+					filtered = filtered.OrderByDescending(a => a.State.IsUnlocked);
+					break;
+				// A-Z.
+				case 2: 
+					filtered = filtered.OrderBy(a => a.Definition.Name);
+					break;
+				// Progress - highest percentage first.
+				case 3: 
+					filtered = filtered.OrderByDescending(a =>
+						a.Definition.MaxProgress.HasValue
+							? (float)(a.State.Progress ?? 0) / a.Definition.MaxProgress.Value
+							: a.State.IsUnlocked ? 1f : 0f);
+					break;
+			}
+
+			_filteredData = filtered.ToList();
+		}
+
 		private void ToggleUI(bool? force = null)
 		{
 			if (force.HasValue)
@@ -264,6 +301,8 @@ namespace Achievements
 						_achievementsMissingDefinition++;
 					}
 				}
+
+				RefreshFilteredData();
 			}
 		}
 
@@ -318,12 +357,27 @@ namespace Achievements
 			GUILayout.Space(10);
 			GUILayout.BeginVertical();
 
-			GUILayout.BeginScrollView(_scrollPosition);
-			GUILayout.BeginHorizontal();
-			GUILayout.FlexibleSpace();
 			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Definitions.Count} unlocked", "LabelSubHeader");
+
+			GUILayout.BeginHorizontal();
+			_searchQuery = GUILayout.TextField(_searchQuery);
+			if (GUILayout.Button("Reset", GUILayout.ExpandWidth(false)))
+				_searchQuery = string.Empty;
+			GUILayout.Space(10);
+
+			if (GUILayout.Button($"Sort: {_sortOptions[_sortIndex]}", GUILayout.MaxWidth(125)))
+				_sortIndex = (_sortIndex + 1) % _sortOptions.Length;
+
+			// Check for search/sorting change.
+			if (_searchQuery != _lastSearchQuery || _sortIndex != _lastSortIndex)
+			{
+				RefreshFilteredData();
+				_lastSearchQuery = _searchQuery;
+				_lastSortIndex = _sortIndex;
+			}
 			GUILayout.EndHorizontal();
-			foreach (var achievement in Data)
+			GUILayout.BeginScrollView(_scrollPosition);
+			foreach (var achievement in _filteredData)
 			{
 				GUILayout.BeginVertical(achievement.State.IsUnlocked ? "box" : "BoxDark");
 				if (achievement.Definition.IsSecret && !achievement.State.IsUnlocked)
@@ -361,6 +415,11 @@ namespace Achievements
 				GUILayout.BeginHorizontal("box");
 				GUILayout.Label($"Provided by: {achievement.ModId}");
 				GUILayout.FlexibleSpace();
+				if (achievement.State.IsUnlocked && achievement.State.UnlockedAt.HasValue)
+				{
+					GUILayout.Label(achievement.State.UnlockedAt.Value.ToString("dd/MM/yyyy HH:mm"));
+					GUILayout.Space(10);
+				}
 				GUILayout.Label(achievement.State.IsUnlocked ? "<color=#0F0>Unlocked</color>" : "<color=#F00>Locked</color>");
 				GUILayout.EndHorizontal();
 
@@ -393,7 +452,11 @@ namespace Achievements
 							achievement.State.Progress = null;
 						}
 						else
+						{
 							OnAchievementUnlock?.Invoke(achievement.State);
+							achievement.State.Progress = achievement.Definition.MaxProgress;
+							achievement.State.UnlockedAt = DateTime.Now;
+						}
 						SaveUtilities.Upsert(achievement.State);
 					}
 					GUILayout.EndHorizontal();
@@ -433,7 +496,7 @@ namespace Achievements
 			}
 
 			Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
-			Rect animatedRect = Animator.Slide("notification", targetRect, DISPLAY_DURATION, elapsed, SlideDirection.Right, SlideMode.InOut, SLIDE_SPEED);
+			Rect animatedRect = Animator.Slide("notification", targetRect, DISPLAY_DURATION, elapsed, Animator.SlideDirection.Right, Animator.SlideMode.InOut, SLIDE_SPEED);
 			GUILayout.BeginArea(animatedRect, "", "BoxDark");
 			GUILayout.BeginVertical();
 			GUILayout.BeginHorizontal("BoxDark");
