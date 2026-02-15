@@ -270,7 +270,7 @@ namespace Achievements
 			return null;
 		}
 
-		internal static int GetProgress(string modId, string achievementId)
+		public static int GetProgress(string modId, string achievementId)
 		{
 			var state = GetAchievement(modId, achievementId);
 			return state?.Progress ?? 0;
