@@ -11,10 +11,6 @@ namespace Achievements.Utilities.UI
 		private static bool _hasInitialised = false;
 		private static GUISkin _skin;
 
-		// GUI styles.
-		private static GUIStyle _buttonStyle;
-
-		// Core textures.
 		private static Texture2D _black;
 		private static Texture2D _blackHover;
 		private static Texture2D _white;
@@ -56,16 +52,13 @@ namespace Achievements.Utilities.UI
 				Color textColour = Color.white;
 
 				// Override scrollbar width and height.
-				_skin.verticalScrollbar.fixedWidth = 2f;
-				_skin.verticalScrollbarThumb.fixedWidth = 2f;
-				_skin.horizontalScrollbar.fixedHeight = 2f;
-				_skin.horizontalScrollbarThumb.fixedHeight = 2f;
+				_skin.verticalScrollbar.fixedWidth = _skin.verticalScrollbarThumb.fixedWidth = _skin.horizontalScrollbar.fixedHeight = _skin.horizontalScrollbarThumb.fixedHeight = 8f;
 
 				// Button styling.
-				_buttonStyle = new GUIStyle(_skin.button);
-				_buttonStyle.padding = new RectOffset(10, 10, 5, 5);
+				GUIStyle buttonStyle = new GUIStyle(_skin.button);
+				buttonStyle.padding = new RectOffset(10, 10, 5, 5);
 
-				GUIStyle buttonPrimary = new GUIStyle(_buttonStyle);
+				GUIStyle buttonPrimary = new GUIStyle(buttonStyle);
 				buttonPrimary.name = "ButtonPrimary";
 				buttonPrimary.normal.background = _buttonPrimary;
 				buttonPrimary.hover.background = _buttonPrimaryHover;
@@ -87,7 +80,7 @@ namespace Achievements.Utilities.UI
 				buttonPrimaryTextLeft.name = "ButtonPrimaryTextLeft";
 				buttonPrimaryTextLeft.alignment = TextAnchor.MiddleLeft;
 
-				GUIStyle buttonSecondary = new GUIStyle(_buttonStyle);
+				GUIStyle buttonSecondary = new GUIStyle(buttonStyle);
 				buttonSecondary.name = "ButtonSecondary";
 				buttonSecondary.normal.background = _buttonSecondary;
 				buttonSecondary.hover.background = _buttonSecondaryHover;
@@ -102,21 +95,21 @@ namespace Achievements.Utilities.UI
 				buttonSecondaryTextLeft.name = "ButtonSecondaryTextLeft";
 				buttonSecondaryTextLeft.alignment = TextAnchor.MiddleLeft;
 
-				GUIStyle buttonBlack = new GUIStyle(_buttonStyle);
+				GUIStyle buttonBlack = new GUIStyle(buttonStyle);
 				buttonBlack.name = "ButtonBlack";
 				buttonBlack.normal.background = _black;
 				buttonBlack.hover.background = _blackHover;
 				buttonBlack.active.background = _blackHover;
 				buttonBlack.focused.background = _blackHover;
 
-				GUIStyle buttonWhite = new GUIStyle(_buttonStyle);
+				GUIStyle buttonWhite = new GUIStyle(buttonStyle);
 				buttonWhite.name = "ButtonWhite";
 				buttonWhite.normal.background = _white;
 				buttonWhite.hover.background = _whiteHover;
 				buttonWhite.active.background = _whiteHover;
 				buttonWhite.focused.background = _whiteHover;
 
-				GUIStyle buttonBlackTranslucent = new GUIStyle(_buttonStyle);
+				GUIStyle buttonBlackTranslucent = new GUIStyle(buttonStyle);
 				buttonBlackTranslucent.name = "ButtonBlackTranslucent";
 				buttonBlackTranslucent.normal.background = _box;
 				buttonBlackTranslucent.hover.background = _boxHover;
@@ -127,7 +120,7 @@ namespace Achievements.Utilities.UI
 				buttonBlackTranslucent.active.textColor = textColour;
 				buttonBlackTranslucent.focused.textColor = textColour;
 
-				GUIStyle buttonTransparent = new GUIStyle(_buttonStyle);
+				GUIStyle buttonTransparent = new GUIStyle(buttonStyle);
 				buttonTransparent.name = "ButtonTransparent";
 				buttonTransparent.normal.background = null;
 				buttonTransparent.hover.background = _transparent;

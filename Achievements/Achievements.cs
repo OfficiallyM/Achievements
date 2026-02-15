@@ -1,4 +1,5 @@
-﻿using Achievements.Core;
+﻿using Achievements.Components;
+using Achievements.Core;
 using Achievements.Extensions;
 using Achievements.Utilities;
 using Achievements.Utilities.UI;
@@ -21,8 +22,10 @@ namespace Achievements
 		public override string Version => _version;
 		public override bool UseLogger => true;
 		public override bool LoadInMenu => true;
+		public override bool UseHarmony => true;
 
 		internal static Achievements I;
+		internal static AchievementHandler Handler;
 		internal static List<Definition> Definitions = new List<Definition>();
 		internal static List<AchievementData> Data = new List<AchievementData>();
 		internal static bool Debug = false;
@@ -49,7 +52,7 @@ namespace Achievements
 		private bool _showUI = false;
 		private static int _achievementsMissingDefinition = 0;
 		private Vector2 _scrollPosition = Vector2.zero;
-		private List<Notification> _notificationQueue = new List<Notification>();
+		private Queue<Notification> _notificationQueue = new Queue<Notification>();
 		private Notification _renderingNotification;
 		private List<AchievementData> _filteredData;
 		private string[] _sortOptions = { "Default", "Unlocked", "A-Z", "Progress" };
@@ -73,12 +76,36 @@ namespace Achievements
 
 			OnAchievementUnlock += AchievementUnlock;
 
-			// Test achievements.
-			RegisterAchievement(ID, "first_start", "Hello World", "Start the game");
-			RegisterAchievement(ID, "secret_test", "Test Secret Achievement", "Find the hidden thing", isSecret: true);
-			RegisterAchievement(ID, "drive_100km", "Starting the drive", "Drive 100 kilometers", maxProgress: 100);
+			GameObject handler = new GameObject("AchievementHandler");
+			Handler = handler.AddComponent<AchievementHandler>();
+			GameObject.DontDestroyOnLoad(handler);
 
-			UnlockAchievement(ID, "first_start");
+			// Oneshot achievements.
+			RegisterAchievement("getting_started", "Getting Started", "Start a new game");
+			RegisterAchievement("drive_5000_save", "The Long Drive", "Drive 5000 kilometers in a single save");
+			RegisterAchievement("vehicle_perfect", "Perfection", "Fully restore every part of a vehicle");
+			RegisterAchievement("vehicle_rusty", "Rust Bucket", "Drive a vehicle with every part at the worst condition");
+			RegisterAchievement("full_tank", "Full Tank", "Get a full tank of fuel");
+			RegisterAchievement("die", "The Bell Tolls", "Get killed");
+			RegisterAchievement("flip_vehicle", "Rubber Side Down", "Flip a vehicle");
+
+			// Progress achievements.
+			RegisterAchievement("drive_5000_global", "Well Travelled", "Drive 5000 kilometers in total", maxProgress: 5000);
+			RegisterAchievement("drive_10000_global", "Long Way From Home", "Drive 10000 kilometers in total", maxProgress: 10000);
+			RegisterAchievement("drive_25000_global", "Is Anyone Out There?", "Drive 25000 kilometers in total", maxProgress: 25000);
+			RegisterAchievement("munkas_100", "No Mercy", "Kill 100 munkas", maxProgress: 100);
+			RegisterAchievement("bunnies_100", "Rabbit Season", "Kill 100 bunnies", maxProgress: 100);
+
+			// Secret achievements.
+			RegisterAchievement("drive_10000_save", "The Very Long Drive", "Drive 10000 kilometers in a single save", isSecret: true);
+			RegisterAchievement("drive_50000_global", "Are You Lost?", "Drive 50000 kilometers in total", maxProgress: 50000, isSecret: true);
+			RegisterAchievement("speed_cap", "Hittin' the limit", "Reach the vehicle speed cap of 719km/h", isSecret: true);
+			RegisterAchievement("new_game_100", "Indecisive", "Start a new game 100 times", maxProgress: 100, isSecret: true);;
+		}
+
+		public override void OnLoad()
+		{
+			Handler.OnLoad();
 		}
 
 		/// <summary>
@@ -94,7 +121,7 @@ namespace Achievements
 		/// progress.</param>
 		/// <param name="isSecret">true if the achievement should be hidden from users until unlocked; otherwise, false.</param>
 		/// <exception cref="InvalidOperationException">Thrown if an achievement with the same mod ID and achievement ID has already been registered.</exception>
-		public void RegisterAchievement(string modId, string achievementId, string name, string description, int? maxProgress = null, bool isSecret = false)
+		public static void RegisterAchievement(string modId, string achievementId, string name, string description, int? maxProgress = null, bool isSecret = false)
 		{
 			if (GetDefinition(modId, achievementId) != null)
 				throw new InvalidOperationException($"Achievement '{achievementId}' already registered for mod '{modId}'");
@@ -118,6 +145,11 @@ namespace Achievements
 			));
 		}
 
+		internal void RegisterAchievement(string achievementId, string name, string description, int? maxProgress = null, bool isSecret = false)
+		{
+			RegisterAchievement(ID, achievementId, name, description, maxProgress, isSecret);
+		}
+
 		/// <summary>
 		/// Increases the progress of the specified achievement by the given amount, unlocking it if the progress meets or
 		/// exceeds the maximum required.
@@ -128,8 +160,11 @@ namespace Achievements
 		/// <param name="achievementId">The unique identifier of the achievement to update.</param>
 		/// <param name="amount">The amount by which to increase the achievement's progress. Defaults to 1. Must be a positive integer.</param>
 		/// <exception cref="KeyNotFoundException">Thrown if the specified achievement or its definition cannot be found for the given mod.</exception>
-		public void AddProgress(string modId, string achievementId, int amount = 1)
+		public static void AddProgress(string modId, string achievementId, int amount = 1)
 		{
+			if (IsUnlocked(modId, achievementId))
+				return;
+
 			var achievement = GetAchievement(modId, achievementId) ?? 
 				throw new KeyNotFoundException($"Achievement '{achievementId}' not found for mod '{modId}'");
 
@@ -152,6 +187,11 @@ namespace Achievements
 			SaveUtilities.Upsert(achievement);
 		}
 
+		internal static void AddProgress(string achievementId, int amount = 1)
+		{
+			AddProgress(I.ID, achievementId, amount);
+		}
+
 		/// <summary>
 		/// Unlocks the specified achievement for the given mod.
 		/// </summary>
@@ -160,8 +200,11 @@ namespace Achievements
 		/// <exception cref="KeyNotFoundException">Thrown if the specified achievement or its definition does not exist for the given mod.</exception>
 		/// <exception cref="InvalidOperationException">Thrown if the specified achievement is a progress-based achievement. Use AddProgress to increment progress
 		/// instead.</exception>
-		public void UnlockAchievement(string modId, string achievementId)
+		public static void UnlockAchievement(string modId, string achievementId)
 		{
+			if (IsUnlocked(modId, achievementId))
+				return;
+
 			var achievement = GetAchievement(modId, achievementId) ??
 				throw new KeyNotFoundException($"Achievement '{achievementId}' not found for mod '{modId}'");
 
@@ -175,6 +218,11 @@ namespace Achievements
 			AddProgress(modId, achievementId, 1);
 		}
 
+		internal static void UnlockAchievement(string achievementId)
+		{
+			UnlockAchievement(I.ID, achievementId);
+		}
+
 		/// <summary>
 		/// Determines whether the specified achievement is unlocked for the given mod.
 		/// </summary>
@@ -182,12 +230,17 @@ namespace Achievements
 		/// <param name="achievementId">The unique identifier of the achievement to check.</param>
 		/// <returns>true if the specified achievement is unlocked; otherwise, false.</returns>
 		/// <exception cref="KeyNotFoundException">Thrown if an achievement with the specified achievementId is not found for the given modId.</exception>
-		public bool IsUnlocked(string modId, string achievementId)
+		public static bool IsUnlocked(string modId, string achievementId)
 		{
 			var achievement = GetAchievement(modId, achievementId) ??
 				throw new KeyNotFoundException($"Achievement '{achievementId}' not found for mod '{modId}'");
 
 			return achievement.IsUnlocked;
+		}
+
+		internal static bool IsUnlocked(string achievementId)
+		{
+			return IsUnlocked(I.ID, achievementId);
 		}
 
 		/// <summary>
@@ -217,6 +270,17 @@ namespace Achievements
 			return null;
 		}
 
+		internal static int GetProgress(string modId, string achievementId)
+		{
+			var state = GetAchievement(modId, achievementId);
+			return state?.Progress ?? 0;
+		}
+
+		internal static int GetProgress(string achievementId)
+		{
+			return GetProgress(I.ID, achievementId);
+		}
+
 		internal static void RaiseOnStateChange(State state) 
 			=> OnStateChange?.Invoke(state);
 
@@ -237,7 +301,7 @@ namespace Achievements
 
 		public void AchievementUnlock(State state)
 		{
-			_notificationQueue.Add(new Notification()
+			_notificationQueue.Enqueue(new Notification()
 			{
 				Achievement = GetData(state),
 			});
@@ -281,6 +345,9 @@ namespace Achievements
 
 			if (!IsOnMenu)
 			{
+				if (_showUI && IsPaused)
+					mainscript.M.PressedEscape();
+
 				mainscript.M.crsrLocked = !_showUI;
 				mainscript.M.SetCursorVisible(_showUI);
 				mainscript.M.menu.gameObject.SetActive(!_showUI);
@@ -319,7 +386,8 @@ namespace Achievements
 			Styling.Bootstrap();
 			GUI.skin = Styling.GetSkin();
 
-			if ((IsOnMenu || IsPaused) && GUI.Button(new Rect(Screen.width * 0.70f, 10f, 200, 50), "Achievements Manager"))
+			bool menuCondition = IsOnMenu && !mainmenuscript.mainmenu.SettingsScreenObj.activeSelf && !mainmenuscript.mainmenu.SaveScreenObj.activeSelf;
+			if ((menuCondition || IsPaused) && GUI.Button(new Rect(Screen.width * 0.70f, 10f, 200, 50), "Achievements Manager"))
 				ToggleUI();
 
 			if (_showUI || !Animator.IsIdle("mainUI"))
@@ -336,12 +404,6 @@ namespace Achievements
 			// Don't show UI when on main menu if settings or save screens are active.
 			if (IsOnMenu && (mainmenuscript.mainmenu.SettingsScreenObj.activeSelf || mainmenuscript.mainmenu.SaveScreenObj.activeSelf))
 				return;
-			else if (!IsOnMenu && IsPaused)
-			{
-				mainscript.M.PressedEscape();
-				ToggleUI(true);
-				return;
-			}
 
 			float width = Screen.width * 0.25f;
 			float height = Screen.height * 0.75f;
@@ -383,7 +445,7 @@ namespace Achievements
 				_lastSortIndex = _sortIndex;
 			}
 			GUILayout.EndHorizontal();
-			GUILayout.BeginScrollView(_scrollPosition);
+			_scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
 			foreach (var achievement in _filteredData)
 			{
 				GUILayout.BeginVertical(achievement.State.IsUnlocked ? "box" : "BoxDark");
@@ -414,7 +476,8 @@ namespace Achievements
 					GUI.DrawTexture(fillRect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0, new Color(0f, 0.8f, 0f, 1f), 0, 0);
 
 					// Text overlay.
-					GUI.Label(progressRect, $"{achievement.State.Progress ?? 0} / {achievement.Definition.MaxProgress}", "LabelCenter");
+					if (!achievement.Definition.IsSecret || (achievement.Definition.IsSecret && achievement.State.IsUnlocked))
+						GUI.Label(progressRect, $"{achievement.State.Progress ?? 0} / {achievement.Definition.MaxProgress}", "LabelCenter");
 
 					GUILayout.EndHorizontal();
 				}
@@ -487,7 +550,7 @@ namespace Achievements
 			{
 				if (_notificationQueue.Count == 0) return;
 
-				_renderingNotification = _notificationQueue[0];
+				_renderingNotification = _notificationQueue.Dequeue();
 				_renderingNotification.StartDisplayTime = Time.unscaledTime;
 				Animator.Play("notification", Animator.AnimationState.SlideIn);
 				return;
@@ -495,29 +558,31 @@ namespace Achievements
 
 			float elapsed = Time.unscaledTime - _renderingNotification.StartDisplayTime.Value;
 
-			// Trigger slide out in last second.
-			if (elapsed >= DISPLAY_DURATION - 1f && Animator.IsIdle("notification"))
-				Animator.Play("notification", Animator.AnimationState.SlideOut);
-
 			// Remove once animation finishes.
 			if (elapsed >= DISPLAY_DURATION && Animator.IsIdle("notification"))
 			{
-				_notificationQueue.Remove(_renderingNotification);
 				_renderingNotification = null;
 				Animator.Reset("notification");
 				return;
 			}
+			// Trigger slide out in last second.
+			else if (elapsed >= DISPLAY_DURATION - 1f && Animator.IsIdle("notification"))
+				Animator.Play("notification", Animator.AnimationState.SlideOut);
 
-			Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
-			Rect animatedRect = Animator.Slide("notification", targetRect, SlideDirection.Right);
-			GUILayout.BeginArea(animatedRect, "", "BoxDark");
-			GUILayout.BeginVertical();
-			GUILayout.BeginHorizontal("BoxDark");
-			GUILayout.Label("Achievement Unlocked", "LabelHeaderCenter");
-			GUILayout.EndHorizontal();
-			GUILayout.Label(_renderingNotification.Achievement.Definition.Name, "LabelSubHeaderCenter");
-			GUILayout.EndVertical();
-			GUILayout.EndArea();
+			try
+			{
+				Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
+				Rect animatedRect = Animator.Slide("notification", targetRect, SlideDirection.Right);
+				GUILayout.BeginArea(animatedRect, "", "BoxDark");
+				GUILayout.BeginVertical();
+				GUILayout.BeginHorizontal("BoxDark");
+				GUILayout.Label("Achievement Unlocked", "LabelHeaderCenter");
+				GUILayout.EndHorizontal();
+				GUILayout.Label(_renderingNotification.Achievement.Definition.Name, "LabelSubHeaderCenter");
+				GUILayout.EndVertical();
+				GUILayout.EndArea();
+			}
+			catch { }
 		}
 	}
 }

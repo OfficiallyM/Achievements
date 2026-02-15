@@ -100,19 +100,22 @@ namespace Achievements.Utilities.UI
 
 			_offsets[key] = Mathf.Lerp(_offsets[key], target, 1f - Mathf.Pow(0.01f, Time.unscaledDeltaTime * speed));
 
-			// Auto transition to idle once close enough.
-			if (_states[key] == AnimationState.SlideIn && _offsets[key] < 0.5f)
-				_states[key] = AnimationState.Idle;
-
 			float offset = _offsets[key];
+			Rect result;
 			switch (direction)
 			{
-				case SlideDirection.Left: return new Rect(targetRect.x - offset, targetRect.y, targetRect.width, targetRect.height);
-				case SlideDirection.Right: return new Rect(targetRect.x + offset, targetRect.y, targetRect.width, targetRect.height);
-				case SlideDirection.Top: return new Rect(targetRect.x, targetRect.y - offset, targetRect.width, targetRect.height);
-				case SlideDirection.Bottom: return new Rect(targetRect.x, targetRect.y + offset, targetRect.width, targetRect.height);
-				default: return targetRect;
+				case SlideDirection.Left: result = new Rect(targetRect.x - offset, targetRect.y, targetRect.width, targetRect.height); break;
+				case SlideDirection.Right: result = new Rect(targetRect.x + offset, targetRect.y, targetRect.width, targetRect.height); break;
+				case SlideDirection.Top: result = new Rect(targetRect.x, targetRect.y - offset, targetRect.width, targetRect.height); break;
+				case SlideDirection.Bottom: result = new Rect(targetRect.x, targetRect.y + offset, targetRect.width, targetRect.height); break;
+				default: result = targetRect; break;
 			}
+
+			// Transition to idle.
+			if (_states[key] != AnimationState.Idle && Mathf.RoundToInt(offset) == Mathf.RoundToInt(target))
+				_states[key] = AnimationState.Idle;
+
+			return result;
 		}
 	}
 }

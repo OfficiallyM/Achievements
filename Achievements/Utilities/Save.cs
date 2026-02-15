@@ -26,9 +26,13 @@ namespace Achievements.Utilities
 			_data = new SaveData();
 			try
 			{
-				string data = File.ReadAllText(Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Achievements.json"));
-				if (string.IsNullOrEmpty(data)) return;
-				_data = JsonConvert.DeserializeObject<SaveData>(data, _jsonSettings);
+				string file = Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Achievements.json");
+				if (File.Exists(file))
+				{
+					string data = File.ReadAllText(file);
+					if (string.IsNullOrEmpty(data)) return;
+					_data = JsonConvert.DeserializeObject<SaveData>(data, _jsonSettings);
+				}
 			}
 			catch (Exception ex)
 			{
