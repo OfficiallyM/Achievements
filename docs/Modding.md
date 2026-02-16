@@ -1,5 +1,5 @@
 # Integration for other mods
-Modders can add achievements by using the provided wrapper class [available here](Achievements.cs).
+Modders can add achievements by using the provided wrapper class [available here](/Achievements.cs).
 
 ## The basics
 Simply include the wrapper: `using Achievements;`
