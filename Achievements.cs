@@ -83,7 +83,6 @@ namespace Achievements
 		/// <summary>
 		/// Unlocks the specified achievement for the current user.
 		/// </summary>
-		/// <remarks></remarks>
 		/// <param name="achievementId">The unique identifier of the achievement to unlock. Cannot be null or empty.</param>
 		/// <exception cref="InvalidOperationException">Thrown if the achievement system has not been initialized by calling the Init method, or if the specified achievement is a progress-based achievement. Use AddProgress to increment progress
 		/// instead.</exception>
