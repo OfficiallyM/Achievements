@@ -434,7 +434,7 @@ namespace Achievements
 			GUILayout.Space(10);
 			GUILayout.BeginVertical();
 
-			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Data.Count} unlocked", "LabelSubHeader");
+			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Data.Count + _achievementsMissingDefinition} unlocked", "LabelSubHeader");
 
 			GUILayout.BeginHorizontal();
 			_searchQuery = GUILayout.TextField(_searchQuery);
