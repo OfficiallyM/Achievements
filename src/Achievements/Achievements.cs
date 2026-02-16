@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Linq;
 using TLDLoader;
 using UnityEngine;
-using static Achievements.Utilities.UI.Animator;
 
 namespace Achievements
 {
@@ -418,7 +417,7 @@ namespace Achievements
 			float x = Screen.width / 2 - width / 2;
 			float y = Screen.height / 2 - height / 2;
 			Rect targetRect = new Rect(x, y, width, height);
-			Rect animatedRect = Animator.Slide("mainUI", targetRect, SlideDirection.Bottom);
+			Rect animatedRect = Animator.Slide("mainUI", targetRect, Animator.SlideDirection.Bottom);
 
 			if (!_showUI && Animator.IsIdle("mainUI"))
 				return;
@@ -580,7 +579,7 @@ namespace Achievements
 			try
 			{
 				Rect targetRect = new Rect(Screen.width - NOTIFICATION_WIDTH - 10f, Screen.height - NOTIFICATION_HEIGHT - 10f, NOTIFICATION_WIDTH, NOTIFICATION_HEIGHT);
-				Rect animatedRect = Animator.Slide("notification", targetRect, SlideDirection.Right);
+				Rect animatedRect = Animator.Slide("notification", targetRect, Animator.SlideDirection.Right);
 				GUILayout.BeginArea(animatedRect, "", "BoxDark");
 				GUILayout.BeginVertical();
 				GUILayout.BeginHorizontal("BoxDark");
