@@ -270,10 +270,18 @@ namespace Achievements
 			return null;
 		}
 
+		/// <summary>
+		/// Gets the current progress value for the specified achievement within a mod.
+		/// </summary>
+		/// <param name="modId">The unique identifier of the mod containing the achievement.</param>
+		/// <param name="achievementId">The unique identifier of the achievement whose progress is to be retrieved.</param>
+		/// <returns>The progress value of the specified achievement. Returns 0 if the achievement has no recorded progress.</returns>
+		/// <exception cref="KeyNotFoundException">Thrown if an achievement with the specified achievementId is not found for the given modId.</exception>
 		public static int GetProgress(string modId, string achievementId)
 		{
-			var state = GetAchievement(modId, achievementId);
-			return state?.Progress ?? 0;
+			var achievement = GetAchievement(modId, achievementId) ??
+				throw new KeyNotFoundException($"Achievement '{achievementId}' not found for mod '{modId}'");
+			return achievement?.Progress ?? 0;
 		}
 
 		internal static int GetProgress(string achievementId)
@@ -426,7 +434,7 @@ namespace Achievements
 			GUILayout.Space(10);
 			GUILayout.BeginVertical();
 
-			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Definitions.Count} unlocked", "LabelSubHeader");
+			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Data.Count} unlocked", "LabelSubHeader");
 
 			GUILayout.BeginHorizontal();
 			_searchQuery = GUILayout.TextField(_searchQuery);
@@ -538,7 +546,7 @@ namespace Achievements
 			GUILayout.EndScrollView();
 			GUILayout.FlexibleSpace();
 			if (_achievementsMissingDefinition > 0)
-				GUILayout.Label($"{_achievementsMissingDefinition} undefined stored achievements", "LabelCenter");
+				GUILayout.Label($"{_achievementsMissingDefinition} unregistered achievements", "LabelCenter");
 			GUILayout.Label($"<color=#f87ffa><size=16>v{Version}</size></color>", "LabelCenter");
 			GUILayout.EndVertical();
 			GUILayout.EndArea();
