@@ -30,9 +30,6 @@ Parameters:
 - `maxProgress` - A nullable integer to define the maximum progress for the achievement. Defaults to null. Leave null for "one shot" achievements that are either locked or unlocked
 - `isSecret` - A bool to define whether the achievement details should be hidden in the UI until unlocked. Defaults to false
 
-> [!WARNING]
-> Any achievements added from `DbLoad()` or `OnLoad()` should be wrapped in a try-catch to ensure an exception isn't thrown when registering again during the same session. (For example, user going back to main menu, then loading another save/starting a new game)
-
 ### `AddProgress()`
 Used to add progress for a progression achievement, or unlock a one shot achievement
 
