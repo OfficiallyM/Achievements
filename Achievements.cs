@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reflection;
 using TLDLoader;
+using UnityEngine;
 
 namespace Achievements
 {
@@ -48,9 +49,7 @@ namespace Achievements
 			}
 			catch (TargetInvocationException ex)
 			{
-				if (ex.InnerException != null)
-					throw ex.InnerException;
-				throw;
+				Debug.LogWarning($"[Achievements] {ex.InnerException?.Message ?? ex.Message}");
 			}
 		}
 
@@ -74,9 +73,7 @@ namespace Achievements
 			}
 			catch (TargetInvocationException ex)
 			{
-				if (ex.InnerException != null)
-					throw ex.InnerException;
-				throw;
+				Debug.LogWarning($"[Achievements] {ex.InnerException?.Message ?? ex.Message}");
 			}
 		}
 
@@ -98,9 +95,7 @@ namespace Achievements
 			}
 			catch (TargetInvocationException ex)
 			{
-				if (ex.InnerException != null)
-					throw ex.InnerException;
-				throw;
+				Debug.LogWarning($"[Achievements] {ex.InnerException?.Message ?? ex.Message}");
 			}
 		}
 
@@ -122,10 +117,9 @@ namespace Achievements
 			}
 			catch (TargetInvocationException ex)
 			{
-				if (ex.InnerException != null)
-					throw ex.InnerException;
-				throw;
+				Debug.LogWarning($"[Achievements] {ex.InnerException?.Message ?? ex.Message}");
 			}
+			return false;
 		}
 
 		/// <summary>
@@ -147,10 +141,9 @@ namespace Achievements
 			}
 			catch (TargetInvocationException ex)
 			{
-				if (ex.InnerException != null)
-					throw ex.InnerException;
-				throw;
+				Debug.LogWarning($"[Achievements] {ex.InnerException?.Message ?? ex.Message}");
 			}
+			return 0;
 		}
 
 		private static bool AchievementsLoaded()
