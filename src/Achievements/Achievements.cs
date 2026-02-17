@@ -6,6 +6,7 @@ using Achievements.Utilities.UI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using TLDLoader;
 using UnityEngine;
 
@@ -14,7 +15,7 @@ namespace Achievements
 	public class Achievements : Mod
 	{
 		// Mod meta stuff.
-		private string _version = "0.0.1";
+		private string _version = "1.0.0";
 		public override string ID => "M_Achievements";
 		public override string Name => "Achievements";
 		public override string Author => "M-";
@@ -27,9 +28,17 @@ namespace Achievements
 		internal static AchievementHandler Handler;
 		internal static List<Definition> Definitions = new List<Definition>();
 		internal static List<AchievementData> Data = new List<AchievementData>();
+		internal static Preferences Preferences = new Preferences();
 		internal static bool Debug = false;
 		internal static bool IsOnMenu => mainscript.M == null;
-		internal static bool IsPaused => mainscript.M?.menu?.Menu?.activeSelf ?? false;
+		internal static bool IsPaused
+		{
+			get
+			{
+				var menu = mainscript.M?.menu?.Menu;
+				return menu != null && menu.activeSelf;
+			}
+		}
 
 		/// <summary>
 		/// Occurs when an achievement state is updated.
@@ -49,16 +58,23 @@ namespace Achievements
 		private const float DISPLAY_DURATION = 7f;
 
 		private bool _showUI = false;
+		private string[] _tabs = { "Achievements", "Preferences" };
+		private int _activeTab = 0;
+		private AudioSource _audioSource;
 		private static int _achievementsMissingDefinition = 0;
 		private Vector2 _scrollPosition = Vector2.zero;
+
 		private Queue<Notification> _notificationQueue = new Queue<Notification>();
 		private Notification _renderingNotification;
+
 		private List<AchievementData> _filteredData;
 		private string[] _sortOptions = { "Default", "Unlocked", "A-Z", "Progress" };
 		private string _searchQuery;
 		private string _lastSearchQuery;
 		private int _sortIndex;
 		private int _lastSortIndex;
+
+		private AudioClip _notificationSound;
 
 		public Achievements()
 		{
@@ -72,12 +88,17 @@ namespace Achievements
 		public override void OnMenuLoad()
 		{
 			SaveUtilities.Load();
+			Preferences = SaveUtilities.GetPreferences();
 
 			OnAchievementUnlock += AchievementUnlock;
 
 			GameObject handler = new GameObject("AchievementHandler");
 			Handler = handler.AddComponent<AchievementHandler>();
 			GameObject.DontDestroyOnLoad(handler);
+
+			_audioSource = handler.AddComponent<AudioSource>();
+			_audioSource.spatialBlend = 0f;
+			_audioSource.playOnAwake = false;
 
 			// Oneshot achievements.
 			RegisterAchievement("getting_started", "Getting Started", "Start a new game");
@@ -99,7 +120,12 @@ namespace Achievements
 			RegisterAchievement("drive_10000_save", "The Very Long Drive", "Drive 10000 kilometers in a single save", isSecret: true);
 			RegisterAchievement("drive_50000_global", "Are You Lost?", "Drive 50000 kilometers in total", maxProgress: 50000, isSecret: true);
 			RegisterAchievement("speed_cap", "Hittin' the limit", "Reach the vehicle speed cap of 719km/h", isSecret: true);
-			RegisterAchievement("new_game_100", "Indecisive", "Start a new game 100 times", maxProgress: 100, isSecret: true);;
+			RegisterAchievement("new_game_100", "Indecisive", "Start a new game 100 times", maxProgress: 100, isSecret: true);
+
+			// Assets.
+			AssetBundle bundle = AssetBundle.LoadFromStream(Assembly.GetExecutingAssembly().GetManifestResourceStream($"{nameof(Achievements)}.achievements"));
+			_notificationSound = bundle.LoadAsset<AudioClip>("notification.wav");
+			bundle.Unload(false);
 		}
 
 		public override void OnLoad()
@@ -430,9 +456,35 @@ namespace Achievements
 				ToggleUI(false);
 			}
 			GUILayout.EndHorizontal();
-			GUILayout.Space(10);
+			GUILayout.Space(20);
 			GUILayout.BeginVertical();
 
+			GUILayout.BeginHorizontal();
+			GUILayout.Space(5);
+			for (int i = 0; i < _tabs.Length; i++)
+			{
+				if (GUILayout.Button(_tabs[i], _activeTab == i ? "ButtonSecondary" : "button"))
+					_activeTab = i;
+			}
+			GUILayout.Space(5);
+			GUILayout.EndHorizontal();
+
+			switch (_activeTab)
+			{
+				case 0: RenderAchievementsTab(); break;
+				case 1: RenderPreferencesTab(); break;
+			}
+
+			GUILayout.FlexibleSpace();
+			if (_achievementsMissingDefinition > 0 && _activeTab == 0)
+				GUILayout.Label($"{_achievementsMissingDefinition} unregistered achievements", "LabelCenter");
+			GUILayout.Label($"<color=#f87ffa><size=16>v{Version}</size></color>", "LabelCenter");
+			GUILayout.EndVertical();
+			GUILayout.EndArea();
+		}
+
+		private void RenderAchievementsTab()
+		{
 			GUILayout.Label($"{SaveUtilities.GetUnlockedCount()} / {Data.Count + _achievementsMissingDefinition} unlocked", "LabelSubHeader");
 
 			GUILayout.BeginHorizontal();
@@ -505,7 +557,8 @@ namespace Achievements
 					GUILayout.BeginVertical("BoxDark");
 					GUILayout.Label("Debug settings", "LabelCenter");
 					GUILayout.BeginHorizontal();
-					if (achievement.Definition.MaxProgress != null) {
+					if (achievement.Definition.MaxProgress != null)
+					{
 						int progress = achievement.State.Progress ?? 0;
 						if (GUILayout.Button("-", GUILayout.MaxWidth(30)))
 						{
@@ -520,7 +573,7 @@ namespace Achievements
 					}
 					GUILayout.FlexibleSpace();
 
-					if (GUILayout.Button(achievement.State.IsUnlocked ? "Re-lock": "Unlock", GUILayout.ExpandWidth(false)))
+					if (GUILayout.Button(achievement.State.IsUnlocked ? "Re-lock" : "Unlock", GUILayout.ExpandWidth(false)))
 					{
 						achievement.State.IsUnlocked = !achievement.State.IsUnlocked;
 						if (!achievement.State.IsUnlocked)
@@ -543,12 +596,20 @@ namespace Achievements
 			}
 
 			GUILayout.EndScrollView();
+		}
+
+		private void RenderPreferencesTab()
+		{
+			GUILayout.Space(10);
+			Preferences.NotificationSound = GUILayout.Toggle(Preferences.NotificationSound, "Play achievement unlock sound");
+			GUILayout.Space(10);
+
+			GUILayout.BeginHorizontal();
 			GUILayout.FlexibleSpace();
-			if (_achievementsMissingDefinition > 0)
-				GUILayout.Label($"{_achievementsMissingDefinition} unregistered achievements", "LabelCenter");
-			GUILayout.Label($"<color=#f87ffa><size=16>v{Version}</size></color>", "LabelCenter");
-			GUILayout.EndVertical();
-			GUILayout.EndArea();
+			if (GUILayout.Button("Save preferences", GUILayout.ExpandWidth(false)))
+				SaveUtilities.SavePreferences();
+			GUILayout.Space(5);
+			GUILayout.EndHorizontal();
 		}
 
 		private void RenderNotifications()
@@ -560,6 +621,8 @@ namespace Achievements
 				_renderingNotification = _notificationQueue.Dequeue();
 				_renderingNotification.StartDisplayTime = Time.unscaledTime;
 				Animator.Play("notification", Animator.AnimationState.SlideIn);
+				if (Preferences.NotificationSound)
+					_audioSource.PlayOneShot(_notificationSound);
 				return;
 			}
 

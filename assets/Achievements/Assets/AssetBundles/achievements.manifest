@@ -1,0 +1,17 @@
+ManifestFileVersion: 0
+CRC: 4191076596
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: ad4eb5d72b35b7bc5b02958a55542614
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 9a2ca7bdbd1871f7131daf57de908e0c
+HashAppended: 0
+ClassTypes:
+- Class: 83
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/Notification.wav
+Dependencies: []

@@ -3,14 +3,14 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using TLDLoader;
 
 namespace Achievements.Utilities
 {
 	internal static class SaveUtilities
 	{
-		private static SaveData _data;
+		private static AchievementSaveData _achievementData;
+		private static Preferences _preferences;
 
 		private static readonly JsonSerializerSettings _jsonSettings = new JsonSerializerSettings
 		{
@@ -19,11 +19,12 @@ namespace Achievements.Utilities
 		};
 
 		/// <summary>
-		/// Unserialize existing save data.
+		/// Unserialize existing saved data.
 		/// </summary>
 		public static void Load()
 		{
-			_data = new SaveData();
+			_achievementData = new AchievementSaveData();
+			_preferences = new Preferences();
 			try
 			{
 				string file = Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Achievements.json");
@@ -31,29 +32,44 @@ namespace Achievements.Utilities
 				{
 					string data = File.ReadAllText(file);
 					if (string.IsNullOrEmpty(data)) return;
-					_data = JsonConvert.DeserializeObject<SaveData>(data, _jsonSettings);
+					_achievementData = JsonConvert.DeserializeObject<AchievementSaveData>(data, _jsonSettings);
 				}
 			}
 			catch (Exception ex)
 			{
-				Logging.LogError($"Save Load() error. Details: {ex}");
+				Logging.LogError($"Achievements load error. Details: {ex}");
+			}
+
+			try
+			{
+				string file = Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Preferences.json");
+				if (File.Exists(file))
+				{
+					string data = File.ReadAllText(file);
+					if (string.IsNullOrEmpty(data)) return;
+					_preferences = JsonConvert.DeserializeObject<Preferences>(data, _jsonSettings);
+				}
+			}
+			catch (Exception ex)
+			{
+				Logging.LogError($"Preferences load error. Details: {ex}");
 			}
 		}
 
 		/// <summary>
-		/// Serialize save data and write to save.
+		/// Serialize and write achievement data.
 		/// </summary>
 		private static void Save()
 		{
 			try
 			{
-				_data.Version = Achievements.I.Version;
-				string json = JsonConvert.SerializeObject(_data, Formatting.None, _jsonSettings);
+				_achievementData.Version = Achievements.I.Version;
+				string json = JsonConvert.SerializeObject(_achievementData, Formatting.None, _jsonSettings);
 				File.WriteAllText(Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Achievements.json"), json);
 			}
 			catch (Exception ex)
 			{
-				Logging.LogError($"Save Commit() error. Details: {ex}");
+				Logging.LogError($"Achievement save error. Details: {ex}");
 			}
 		}
 
@@ -66,9 +82,9 @@ namespace Achievements.Utilities
 		/// AchievementId properties.</param>
 		public static void Upsert(State state)
 		{
-			bool doesExist = _data.Achievements.IndexOf(state) != -1;
+			bool doesExist = _achievementData.Achievements.IndexOf(state) != -1;
 			if (!doesExist)
-				_data.Achievements.Add(state);
+				_achievementData.Achievements.Add(state);
 			else
 				Achievements.RaiseOnStateChange(state);
 			Save();
@@ -81,7 +97,7 @@ namespace Achievements.Utilities
 		/// available.</returns>
 		public static List<State> GetAchievements()
 		{
-			return _data.Achievements;
+			return _achievementData.Achievements;
 		}
 
 		/// <summary>
@@ -96,7 +112,7 @@ namespace Achievements.Utilities
 		/// achievement is not defined.</returns>
 		public static State GetAchievement(string modId, string achievementId)
 		{
-			foreach (var achievement in _data.Achievements)
+			foreach (var achievement in _achievementData.Achievements)
 			{
 				if (achievement.ModId == modId && achievement.AchievementId == achievementId) 
 					return achievement;
@@ -117,15 +133,41 @@ namespace Achievements.Utilities
 			return null;
 		}
 
+		/// <summary>
+		/// Gets the number of achievements that have been unlocked.
+		/// </summary>
+		/// <returns>The total number of unlocked achievements. Returns 0 if no achievements are unlocked.</returns>
 		public static int GetUnlockedCount()
 		{
 			int count = 0;
-			foreach (var achievement in _data.Achievements)
+			foreach (var achievement in _achievementData.Achievements)
 			{
 				if (achievement.IsUnlocked)
 					count++;
 			}
 			return count;
 		}
+
+		/// <summary>
+		/// Saves user preferences.
+		/// </summary>
+		public static void SavePreferences()
+		{
+			try
+			{
+				string json = JsonConvert.SerializeObject(_preferences, Formatting.None, _jsonSettings);
+				File.WriteAllText(Path.Combine(ModLoader.GetModConfigFolder(Achievements.I), "Preferences.json"), json);
+			}
+			catch (Exception ex)
+			{
+				Logging.LogError($"Preferences save error. Details: {ex}");
+			}
+		}
+
+		/// <summary>
+		/// Gets the current user preferences.
+		/// </summary>
+		/// <returns>A <see cref="Preferences"/> object representing the current user preferences.</returns>
+		public static Preferences GetPreferences() => _preferences;
 	}
 }
